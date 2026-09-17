@@ -20,8 +20,7 @@ class GameState{
 
   nextPhase(){
     if(this.phaseQueue.length == 0) return
-    this.phaseQueue[0].begin(this.users)
-    this.phaseQueue = this.phaseQueue.slice(1)
+    this.phaseQueue.shift().begin(this.users)
   }
 
   joinGame(user){
@@ -46,6 +45,8 @@ class Phase {
   constructor (gameState) {
     this.nextPhase = () => gameState.nextPhase()
   }
+
+  begin(){}
 }
 
 class JoinPhase extends Phase{
@@ -61,7 +62,7 @@ class JoinPhase extends Phase{
       this.joinGame(crypto.randomUUID())
     }
     
-    setTimeout(()=> this.nextPhase(), 1000)
+    setTimeout(()=> this.nextPhase(), 100)
   }
 }
 
@@ -73,7 +74,7 @@ class RulesPhase extends Phase{
   begin(){
     console.log("\n--- Rules phase \nTake turns and gain points, the winner is the person with the most points at the end")
 
-    setTimeout(()=> this.nextPhase(), 1000)
+    setTimeout(()=> this.nextPhase(), 100)
   }
 }
 
@@ -81,6 +82,8 @@ class RoundPhase extends Phase{
   constructor(gameState, roundNumber){
     super(gameState)
     this.userLeft = gameState.userLeft
+
+    this.updateFields = (fields) => gameState.updateFields(fields)
 
     this.roundNumber = roundNumber
     this.turns = new Set()
@@ -104,7 +107,7 @@ class RoundPhase extends Phase{
       console.log(usersTurn)
 
       this.turns.add(usersTurn)
-    }, 100)
+    }, 10)
   }
 }
 
@@ -123,7 +126,7 @@ class ResultsPhase extends Phase{
       console.log(["🥇", "🥈", "🥉"][i] || "", user.name, ":", user.score)
     }
 
-    setTimeout(() => this.nextPhase(), 1000);
+    setTimeout(() => this.nextPhase(), 100);
   }
 }
 
