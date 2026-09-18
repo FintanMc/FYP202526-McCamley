@@ -7,12 +7,12 @@ const socket = io("/", {
   }
 })
 
-const header = document.querySelector("h1")
-
+const header = document.querySelector("#header")
 
 socket.on("stateChange", (state)=>{
   console.log(state)
   const {phase, players} = state
+  document.body.id = phase.type
 
   let text = ""
   switch(phase.type){
