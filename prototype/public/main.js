@@ -1,9 +1,9 @@
 import { io } from "https://cdn.socket.io/4.8.3/socket.io.esm.min.js";
-if(!sessionStorage.getItem("clientID")) sessionStorage.setItem("clientID", crypto.randomUUID())
+if(!localStorage.getItem("clientID")) localStorage.setItem("clientID", crypto.randomUUID())
 
 const socket = io("/", {
   extraHeaders: {
-    "clientID": sessionStorage.getItem("clientID")
+    "clientID": localStorage.getItem("clientID")
   }
 })
 

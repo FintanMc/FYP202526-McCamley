@@ -42,12 +42,11 @@ class Game{
   }
 
   start(){
+    this.allowRejoin = []
     this.phaseQueue = [new JoinPhase()]
-
-    this.players.forEach((player)=> player.update(p => {return {...p, score:0}}))
-
     this.phase.initialize(this.players)
-    this.stateChange()
+    
+    this.players.forEach((player)=> player.update(p => {return {...p, score:0}}))
   }
 
   get phase(){ return this.phaseQueue[0] }
@@ -74,7 +73,13 @@ class Game{
     try{
       let player = this.getPlayer(id)
       if(!player){
-        player = this.phase.createPlayer(id, meta)
+        try{
+          player = this.phase.createPlayer(id, meta)
+          this.allowRejoin.push(id)
+        }catch{
+          if(!this.allowRejoin.includes(id)) throw `${id} unable to join game`
+          player = signal({id, score: 0, ...meta})
+        }
         this.players.addPlayer(id, player)
       }
       return player
@@ -190,18 +195,21 @@ class PlayerRepo{
   deletePlayer = (id) => { this.players.delete(id); this.playersUpdated() }
   queueForDeletion = (id, callback) => {this.deleteMap.set(id, setTimeout(()=> { this.deletePlayer(id); callback() }, 10000))}
   getPlayer = (id) => this.players.get(id)
-  queryPlayer = (query) => [...this.players.values()].find(query)
-  getOrAddPlayer = (id, name) => this.getPlayer(id) || this.addPlayer(id, signal({name, score: 0}))
+  queryPlayer = (query) => this.array.find(query)
+  getOrAddPlayer = (id, meta) => this.getPlayer(id) || this.addPlayer(id, signal({id, ...meta, score: 0}))
   get length(){ return this.players.size}
   get array(){ return Array.from(this.players.values())}
   get ids(){ return Array.from(this.players.keys())}
-  forEach = (fn) => this.players.forEach((player, id) => player = fn(player))
+  forEach = (fn) => { this.players.forEach((player, id) => player = fn(player)); this.playersUpdated() }
 }
 //#endregion
 
 const gameRepo = new GameRepository()
 
 io.on("connection", (socket)=>{
+  const { clientid } = socket.handshake.headers
+  console.log(clientid, "connected", {clientid})
+
   let player
 
   const assignGame = event((game)=>{
@@ -212,38 +220,39 @@ io.on("connection", (socket)=>{
         players: game.players.array.map(p=>p())
       }
     ))
+    stateChange()
 
     socket.on("next", ()=> game.nextPhase())
     socket.on("turn", (error)=> { try{ game.takeTurn(player) } catch(e){ error(e) } })
 
     socket.on("disconnect", ()=>{
-      console.log(socket.id, "disconnected")
+      console.log(clientid, "disconnected")
       game.queueleave(clientid)
       stateChange.unsubscribe()
     })
   })
 
-  const { clientid } = socket.handshake.headers
-  console.log(socket.id, "connected", {clientid})
-
   let game = gameRepo.queryGame(g => !!g.getPlayer(clientid))
   if(game) {
-    assignGame(game)
-    player = game.joinGame(clientid, {})
+    try{
+      player = game.joinGame(clientid, {})
+      assignGame(game)
+    }catch(e){
+      console.error(e)
+    }
   }
 
   socket.on("join or make game", (code, name, me)=>{
     if(game) return
     game = gameRepo.getOrAddGame(code)
-    console.log(name, game)
-    assignGame(game)
-    
     try{
       player = game.joinGame(clientid, { name })
+      assignGame(game)
       me(player())
     }
     catch(e){
       console.error(e)
+      game = null
     }
   })
 
