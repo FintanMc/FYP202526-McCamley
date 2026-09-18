@@ -8,11 +8,13 @@ const socket = io("/", {
 })
 
 const header = document.querySelector("#header")
+const codeHeader = document.querySelector("#code")
 
 socket.on("stateChange", (state)=>{
   console.log(state)
-  const {phase, players} = state
+  const {phase, players, code} = state
   document.body.id = phase.type
+  codeHeader.innerHTML = `Room: ${code}`
 
   let text = ""
   switch(phase.type){
