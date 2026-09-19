@@ -32,6 +32,10 @@ function signal(value){
 }
 //#endregion
 
+function Player(id, meta){
+  return signal({id, score:0, ...meta})
+}
+
 class Game{
   constructor(code){
     this.code = code
@@ -51,40 +55,42 @@ class Game{
 
   get phase(){ return this.phaseQueue[0] }
 
-  nextPhase(){ 
-    this.phase.onNextPhase(this.phaseQueue)
-    if(this.phaseQueue.length == 1) return this.start()
-
-    this.phaseQueue.shift()
-    this.phase && this.phase.initialize(this.players)
-    this.stateChange() 
+  nextPhase(){
+    if(this.phase.nextPhase(this.phaseQueue)){
+      this.phase.initialize(this.players)
+      this.stateChange()
+    } 
+    else if(this.phaseQueue.length == 0) {
+      this.start()
+    }
   }
 
   takeTurn(player){
     try{
       this.phase.takeTurn(player)
-        ? this.nextPhase()
-        : this.stateChange()
+      this.stateChange()
+      this.nextPhase()
     }
     catch{ throw `${player().id} unable to take turn` }
   }
 
   joinGame(id, meta){
-    try{
-      let player = this.getPlayer(id)
-      if(!player){
-        try{
-          player = this.phase.createPlayer(id, meta)
-          this.allowRejoin.push(id)
-        }catch{
-          if(!this.allowRejoin.includes(id)) throw `${id} unable to join game`
-          player = signal({id, score: 0, ...meta})
-        }
-        this.players.addPlayer(id, player)
+    let player = this.getPlayer(id)
+    if(!player){
+      try{
+        // if player doesn't exist, create a new one
+        player = this.phase.createPlayer(id, meta)
+        this.allowRejoin.push(id)
+      }catch{
+        // if player can't be created, check if they are allowed to rejoin
+        if(!this.allowRejoin.includes(id)) throw `${id} unable to join game`
+        player = Player(id, meta)
       }
-      return player
+      this.players.addPlayer(id, player)
+    }else{
+      this.players.cancelDeletion(id)
     }
-    catch (e){ throw `${id} unable to join game` }
+    return player
   }
 
   getPlayer(id){
@@ -107,7 +113,7 @@ class Phase{
   }
 
   initialize(players){}
-  onNextPhase(phaseQueue){}
+  nextPhase(phaseQueue){ phaseQueue.shift(); return phaseQueue.length > 0; }
 }
 
 class JoinPhase extends Phase {
@@ -116,16 +122,18 @@ class JoinPhase extends Phase {
   }
 
   createPlayer(id, meta){
-    return signal({id, score: 0, ...meta})
+    return Player(id, meta)
   }
 
-  onNextPhase(phaseQueue){
+  nextPhase(phaseQueue){
     phaseQueue.push(  
       new RulesPhase(),
       new RoundPhase(1),
       new RoundPhase(2),
       new ResultsPhase()
     )
+
+    return super.nextPhase(phaseQueue)
   }
 }
 
@@ -150,13 +158,17 @@ class RoundPhase extends Phase{
         p.score += Math.floor(Math.random() * 10)
         return p
       })
-
-      console.log(player().id, "took turn, score:", player().score)
       this.turnsQueue.shift()
-
-      return this.turnsQueue.length == 0
+      
+      console.log(player().id, "took turn, score:", player().score)
+    } else {
+      throw "out of turn"
     }
-    throw "out of turn"
+  }
+
+  nextPhase(phaseQueue){
+    if(this.turnsQueue.length > 0) return false
+    return super.nextPhase(phaseQueue)
   }
 }
 
@@ -187,16 +199,16 @@ class PlayerRepo{
   constructor(){ this.players = new Map(); this.deleteMap = new Map(); this.playersUpdated = event() }
   addPlayer = (id, player) => {
     this.players.set(id, player)
-    this.deleteMap.get(id)?.close()
-    this.deleteMap.delete(id)
+    this.cancelDeletion(id)
     this.playersUpdated()
     return player
   }
   deletePlayer = (id) => { this.players.delete(id); this.playersUpdated() }
-  queueForDeletion = (id, callback) => {this.deleteMap.set(id, setTimeout(()=> { this.deletePlayer(id); callback() }, 10000))}
+  queueForDeletion = (id, callback) => { this.deleteMap.set(id, setTimeout(()=> { this.deletePlayer(id); callback() }, 10000)) }
+  cancelDeletion = (id) => { this.deleteMap.get(id)?.close(); this.deleteMap.delete(id) }
   getPlayer = (id) => this.players.get(id)
   queryPlayer = (query) => this.array.find(query)
-  getOrAddPlayer = (id, meta) => this.getPlayer(id) || this.addPlayer(id, signal({id, ...meta, score: 0}))
+  getOrAddPlayer = (id, meta) => this.getPlayer(id) || this.addPlayer(id, Player(id, meta))
   get length(){ return this.players.size}
   get array(){ return Array.from(this.players.values())}
   get ids(){ return Array.from(this.players.keys())}
@@ -212,25 +224,25 @@ io.on("connection", (socket)=>{
 
   let player
 
-  const assignGame = event((game)=>{
+  const assignGame = (game)=>{
     const stateChange = game.stateChange.subscribe(() => socket.emit("stateChange",
       {
         code: game.code,
-        phase: game.phase || new Phase("default"),
+        phase: game.phase || new Phase("NONE", "No phase"),
         players: game.players.array.map(p=>p())
       }
     ))
     stateChange()
 
     socket.on("next", ()=> game.nextPhase())
-    socket.on("turn", (error)=> { try{ game.takeTurn(player) } catch(e){ error(e) } })
+    socket.on("turn", (error)=> { try{ game.takeTurn(player) } catch(e){ console.error(e); error(e) } })
 
     socket.on("disconnect", ()=>{
       console.log(clientid, "disconnected")
       game.queueleave(clientid)
       stateChange.unsubscribe()
     })
-  })
+  }
 
   let game = gameRepo.queryGame(g => !!g.getPlayer(clientid))
   if(game) {
@@ -256,4 +268,10 @@ io.on("connection", (socket)=>{
     }
   })
 
+  socket.on("leave game", ()=>{
+    if(!game) return
+    game.players.deletePlayer(clientid)
+    socket.emit("stateChange", null)
+    game = null
+  })
 })

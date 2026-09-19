@@ -26,28 +26,53 @@
       .no-phase, .join-phase, .rules-phase, .round-phase, .results-phase{
         display: none;
       }
+
+      &#NONE .game-phases {
+        display: none;
+      }
     }
     input, button{
       border: 1px solid hsl(0, 0%, 25%);
       padding: 0.5rem 1rem;
       border-radius: 0.25rem;
+      font-weight: bolder;
+
       &:hover{
         background: hsl(0, 0%, 10%);
       }
+
+      &.cta{
+        background: var(--col);
+        border-color: var(--col);
+        color: hsl(0, 0%, 10%);
+      }
+    }
+
+    .flex{
+      display: flex;
+      justify-content: start;
+      gap: 1rem;
+      align-items: center;
     }
   </style>
 </head>
 <body id="NONE">
-  <h1 id="code"></h1>
+  <div class="game-phases">
+    <div class="flex">
+      <button id="leave">Leave Game.</button>
+      <h1 id="code"></h1>
+    </div>
+    <h1 id="header"></h1>
+    <h2 id="subtext"></h2>
+  </div>
   <div class="no-phase">
     <h1>Join Game</h1>
     <input id="room" placeholder="room">
     <input id="name" placeholder="name">
-    <button id="join">Join</button>
+    <button id="join" class="cta">Join.</button>
   </div>
-  <h1 id="header"></h1>
-  <button id="next" class="join-phase rules-phase results-phase">next phase</button>
-  <button id="turn" class="round-phase">take turn</button>
+  <button id="next" class="cta join-phase rules-phase results-phase">Next Phase.</button>
+  <button id="turn" class="cta round-phase">Take Turn.</button>
 
   <script type="module" src="main.js"></script>
 </body>
