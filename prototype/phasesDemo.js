@@ -107,6 +107,12 @@ game.usePhase(
     })
 
     state.on("confirm", ()=> next())
+
+    state.allPhases.on("join", (val)=> {
+      if(!state.players.find(p => p.name === val.name)) return
+      console.log("attempting rejoin for", val)
+      //state.players.push({...val, score: 0})
+    })
   }
 )
 
@@ -169,3 +175,96 @@ game.request("take turn", {name: "Paul Blart"})
 game.request("take turn", {name: "John Doe"}).catch(standardErrorHandler)
 
 
+
+const express = require("express")
+const app = express()
+const cookieParser = require("cookie-parser")
+
+app.use(
+  express.json(), 
+  express.urlencoded({ extended: true }),
+  cookieParser()
+)
+
+const apiRouter = express.Router()
+
+const appGame = new Game()
+
+appGame.usePhase(
+  (state, next)=>{
+    state.title = "Join phase"
+    state.players = new Map()
+
+    state.on("join", (val, then)=> {
+      const player = state.players.get(val.id)
+      if(player) return then(state.players.get(val.id))
+
+      state.players.set(val.id, {...val, score: 0})
+      return then(state.players.get(val.id))
+    })
+  }
+)
+
+appGame.start()
+
+apiRouter.use((req, res, next) => {
+  req.sessionId = req.cookies.sessionId || null
+  console.log("API request:", req.method, req.url, JSON.stringify(req.cookies))
+  next()
+})
+
+apiRouter.post("/join", (req, res) => {
+  if(!req.sessionId) res.cookie("sessionId", crypto.randomUUID(), {httpOnly: true})
+
+  appGame.request("join", {id: req.sessionId, name: req.body.name}, (player) => {
+    console.log("Player joined:", player)
+    res.send(player)
+  })
+  .catch((err) => {
+    if (!err) return
+    console.error(err)
+    res.status(err.status || 500).send({error: err.name, message: err.message})
+  })
+})
+
+app.use("/api", apiRouter)
+
+app.use(
+  express.static("public/test2")
+)
+
+const server = app.listen(3000, () => {
+  console.log("Server listening on port 3000")
+})
+
+const {Server} = require("socket.io")
+
+const io = new Server(server)
+
+const parseCookies = (cookieString) => {
+  return cookieString.split("; ").reduce((acc, cookie) => {
+    const [name, value] = cookie.split("=")
+    acc[name] = value
+    return acc
+  }, {})
+}
+
+io.on("connection", (socket) => {
+  const { sessionId } = parseCookies(socket.handshake.headers.cookie || "")
+  console.log("Socket connected:", socket.id, sessionId)
+
+  let player
+
+  socket.on("sync", (callback) => {
+    appGame.request("join", {id: sessionId}, (p) => {
+      console.log("Sync request from", p.name)
+      player = p
+      callback(
+        {
+          title: appGame.state.title,
+          players: Array.from(appGame.state.players.values())
+        }
+      )
+    })
+  })
+})

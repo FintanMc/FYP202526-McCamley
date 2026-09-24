@@ -1,6 +1,6 @@
 const express = require("express")
 const app = express()
-app.use(express.static("public"))
+app.use(express.static("public/test1"))
 
 const appServer = app.listen(3000, ()=>{
   console.log("app started http://localhost:3000")
