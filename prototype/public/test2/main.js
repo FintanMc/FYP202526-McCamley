@@ -15,14 +15,29 @@ const sendRequest = (endpoint, data, then = ()=>{}) => {
 
 const locate = (identifier) => document.querySelector(identifier)
 
-sendRequest("/api/join", {name: "John Doe"}, async (response) => {
-  const player = await response
-  locate("#me").innerText = `You are ${player.name}`
-  
-  socket.emit("sync", (state) => {
-    console.log("websocket synced", state)
-    const { title } = state
+
+const nameInput = locate("#name-input")
+
+locate("#join-button").addEventListener("click", () => {
+  sendRequest("/api/join", {name: nameInput.value}, async (response) => {
+    const player = await response
+    console.log("Joined:", player)
+    locate("#me").innerText = `You are ${player.name || player.id}`
     
-    locate("#main-header").innerText = title
+    socket.emit("sync")
   })
-});
+})
+
+socket.on("update", (state) => {
+  console.log("state synced", state)
+  const { title } = state
+  
+  locate("#main-header").innerText = title
+})
+
+locate("#start-button").addEventListener("click", () => {
+  sendRequest("/api/start", {}, async (response) => {
+    const state = await response
+    console.log("Game started:", state)
+  })
+})
