@@ -1,14 +1,20 @@
 {
   "name": "webapp",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server/app.ts",
   "scripts": {
+    "build": "tsc",
+    "start": "node --experimental-strip-types server/app.ts",
+    "dev": "nodemon --exec node --experimental-strip-types server/app.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "type": "module",
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.6",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
