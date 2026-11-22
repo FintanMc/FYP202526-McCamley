@@ -1,2 +1,2 @@
 def main() -> None:
-    print("Starting application...")
+    print("Starting AI Harness")

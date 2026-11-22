@@ -1,8 +1,9 @@
 import express from 'express';
 import path from 'path';
 
+process.loadEnvFile(path.resolve(process.cwd(), '../.env'));
 const app = express();
-const port = 3030;
+const port = process.env.SERVER_PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
